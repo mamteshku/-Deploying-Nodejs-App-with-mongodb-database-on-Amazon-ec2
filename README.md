@@ -1,17 +1,19 @@
-These are the steps
+# These are the steps
 
-    Launch a new ec2 instance from Amazon Web Service.
-    Setup SSH Connection to connect ec2 instance
-    Install Nodejs using nvm
-    Install MongoDB database
-    Setup Nodejs (Express) App
+1. Create an AWS account
+2. Launch an EC2 instance
+3. SSH into your instance
+4. Install Node.js
+5. Install Git and clone repository from GitHub
+6. Start the node.js app
+7. Keep the app running
+8. Move the app to port 80 (not really)
+9. Configure Nginx to autostart on instance reboot
 
-# Step 1 # create a new ec2 instance from Amazon Web Service.
+# Step 1  create a new ec2 instance from Amazon Web Service.
 
 To create a new instance, you should have an active account on AWS.After logging to Aws
-
 select an ec2 option from Services
-
 Then click on Launch Instance button after that you’ll land to below page.
 
 Then select one image from list of options. Please select an image according to your requirement and whichever is suitable for you. So in my case I’ll select Amazon Linux.
@@ -59,7 +61,7 @@ eg. ssh -i "sunilaws.pem" ec2-user@ec2-54-218-8-133.us-west-2.compute.amazonaws.
 Note: In my case, user for my ec2 server is ec2-user because I’ve selected Amazon Linux Image.So In your case user will be different if you have selected an Amazon Machine Image other than Amazon Linux. Here is the list of al default user for Amazon Image . See here
 Step 3# Install Node Js on ec2 instance
 
-To set up Node.js on your Linux instance
+# To set up Node.js on your Linux instance
 
     Connect to your Linux instance as ec2-user using SSH.
     Install the current version of node version manager (nvm) by typing the following at the command line to install version 33.8.
