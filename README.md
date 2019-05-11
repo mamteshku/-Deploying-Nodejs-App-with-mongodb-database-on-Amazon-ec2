@@ -63,30 +63,23 @@ Step 3# Install Node Js on ec2 instance
 
 # To set up Node.js on your Linux instance
 
-    Connect to your Linux instance as ec2-user using SSH.
-    Install the current version of node version manager (nvm) by typing the following at the command line to install version 33.8.
-
-curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.33.8/install.sh | bash
+Now that we are connected to the instance, we can start installing the required packages in the environment for your node.js app to work. We will be using NVM (Node Version Manager) to install node.js as it provides a neat way to manage multiple node.js versions on the instance if required. Run the following code in the terminal to get NVM and install it.
+  
+  curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.33.8/install.sh | bash
 
 We will use nvm to install Node.js because nvm can install multiple versions of Node.js and allow you to switch between them. See the nvm repo on GitHub for the current version to install.
 
- 3. Activate nvm by typing the following at the command line.
+Activate nvm by typing the following at the command line.
+  . ~/.nvm/nvm.sh
 
-. ~/.nvm/nvm.sh
+Use nvm to install the version of Node.js you intend to use by typing the following at the command line.
 
- 4. Use nvm to install the version of Node.js you intend to use by typing the following at the command line.
+  nvm install 7.9.0
 
-nvm install 7.9.0
+Test that Node.js is installed and running correctly by typing the following at the command line.
 
- 5. Test that Node.js is installed and running correctly by typing the following at the command line.
-
-node -e "console.log('Running Node.js ' + process.version)"
-
-This should display the following message that confirms the installed version of Node.js running.
-
-Running Node.js v7.9.0
-
-For more info, click on this link
+  node -e "console.log('Running Node.js ' + process.version)"
+  
 # Step 4# Install Mongodb on ec2 instance
 
 We’ve selected Amazon Image , we’ll install mongodb using yum command
@@ -106,156 +99,68 @@ gpgkey=https://www.mongodb.org/static/pgp/server-3.6.asc
 
 2. Install the mongodb package
 
-sudo yum install -y mongodb-org
+   sudo yum install -y mongodb-org
 
 3. Start mongodb server
 
-sudo service mongod start
+   sudo service mongod start
 
 4. Check mongodb server started by running below command
 
-mongo
+   mongo
 
-For more info , Please got to this link
-# Step 5 # Setup up Nodejs App(Express)
 
-In this step, we’re going to setup a new sample express app with mongodb connection using mongodb client library.
-According to your requirement, you can use any mongo library available in npm, such as mongoose,mongojs etc.
+# Move the app to port 80 (not really)
 
-First connect to your ec2 instance using command provided in Step 1
+The URL for our app contains the port number 3000 which if you have surfed the web a lot will appear a bit out of the place because you don’t usually see such numbers in the URLs, reason being the websites are generally served on the standard port 80 used for HTTP requests and browsers assume it by default.
 
-ssh -i <pem file path> <user>@<public DNS>
+Currently our node server is running on a publicly open port which is not a particularly brilliant idea as we are directly exposing the application server to internet traffic and also reducing performance by not taking advantages of load balancing or serving static content efficiently.
 
-Then
+A better way to manage this is to use Nginx as a reverse proxy server in front of all other application servers. It will act as an efficient web server routing multiple requests on port 80 to different application servers based on the requested domain or even route high volume internet traffic to the same domain on port 80 to multiple instances of the application server listening on different private ports to perform load balancing in case of application server overloading or crashing. Nginx also takes care of SSL encryption instead of letting Node do all the work.
 
-mkdir SampleExpressApp
-npm init
+Let’s install Nginx first:
+  sudo yum install nginx
+and verify the installed version with 
+  nginx -v.
 
-Create new file app.js with following code
+Enter the public DNS or the public IP of your EC2 instance in the browser now without a port and you should see the default Nginx welcome page.
 
-var express = require("express");
-var app = express();
-var MongoClient = require("mongodb").MongoClient;
+Now, we are not really going to move the app to listen on port 80, the app will still be running on port 3000. We will install Nginx in front of the application server, run it on port 80 so that it can intercept all internet traffic and route it to port 3000 where the required application server will be listening if the HTTP headers match (more details in the next article on serving the site on HTTPS). A nice explanation of why we should be doing this is available here.
 
-app.get("/", function(req, res) {
-  res.send("Hello World!");
-});
+To use port 80 to route requests to the application server on port 3000, we will edit the nginx configuration file — nginx.conf as follows.
 
-app.get("/users", function() {
-  MongoClient.connect("mongodb://localhost:27017/test", function(err, db) {
-    if (err) next
-    db
-      .collection("users")
-      .find()
-      .toArray(function(err, result) {
-        if (err) throw err;
+Open the nginx.conf file with an editor in the terminal:
+  sudo vi /etc/nginx/nginx.conf
+  
+If there’s no server block listening on port 80, add one or change it if it already exists to look like this:
 
-        res.json(result)
-      });
-  });
-});
+server {
+   listen         80 default_server;
+   listen         [::]:80 default_server;
+   server_name    localhost;
+   root           /usr/share/nginx/html;
+   location / {
+       proxy_pass http://127.0.0.1:3000;
+       proxy_http_version 1.1;
+       proxy_set_header Upgrade $http_upgrade;
+       proxy_set_header Connection 'upgrade';
+       proxy_set_header Host $host;
+       proxy_cache_bypass $http_upgrade;
+   }
+}
 
-app.listen(3000,function(){
-    console.log('Express app start on port 3000')
-});
+Since we have a single server block listening on port 80, all traffic will be routed from here itself regardless of the value of the server_name directive. The location directive has been changed to point to the resource from where the content has to be served, in our case it is the node.js application server running on the private localhost IP 127.0.0.1 and port 3000. Ignore the other directives for now.
 
-Then install mongodb & express dependancy
+Save the configuration and restart the server with the following command:
 
-npm install mongodb --save
-npm install express --save
+  sudo service nginx restart
+  
+You will now have all HTTP traffic available on port 80 forwarded to port 3000. You should close port 3000 to public access by removing it from the security group settings. Visit the URL again in the browser without the port and you will be able to see the app content now instead of the default Nginx welcome page.
 
-Then start server
+#Configure Nginx to autostart on instance reboot
+There’s just one last thing to take care of before we wrap up. We need to configure Nginx to start automatically if the instance is rebooted. Execute the following command to do this:
 
-node app.js
+  sudo chkconfig nginx on
 
-Now Express App start on port 3000
+You can close the session, reboot the instance and visit the URL again. You should see the app being served on port 80.
 
-Then open below url in browser
-
-http://<your public DNS>:3000
-
-But if you close this terminal or if you perform Ctrl+C server will stop.
-
-So to start server in the background there are multiple NPM library but we’ll use forever to start server. Here is the different option
-https://expressjs.com/en/advanced/pm.html
-
-Install forever globally using npm
-
-npm install -g forever
-
-Start server using forever
-
-forever start app.js
-
-To see list of forever process
-
- forever list
-
-To see Express Server logs
-
-tail -f <logfile path>
-
-If you want to store logs in predefined file, then start server with following command
-
-forever start app.js -l /path/to/log/file
-
-To access this server publicly, you’ve to open port 3000 from security group by adding into inbound rule, as we open port in Step1
-
-After opening 3000 port publicly , hit below url
-
-http://<your pblic DNs>:3000
-eg. http://ec2-0-0-0-0.us-west-2.compute.amazonaws.com:3000
-
-But To access your app on public domain (port 80) you’ve to forward port 80 to 3000.
-
-We’ve 2 way to forward port 3000 to 80, you can choose any one. But I’ll prefer to to select option of nginx
-
-    iptables
-    nginx
-
-iptables
-
-iptables -A INPUT -i eth0 -p tcp --dport 80 -j ACCEPT
-
-iptables -A INPUT -i eth0 -p tcp --dport 3000 -j ACCEPT
-
-iptables -A PREROUTING -t nat -i eth0 -p tcp --dport 80 -j REDIRECT --to-port 3000
-
-nginx
-
-Install nginx
-
-sudo yum install nginx -y
-
-Start nginx Server
-
-sudo service nginx start
-
-To see nginx started , Enter your public DNS URL in browser
-
-Next step , To forward port 3000 to 80
-
-Edit below nginx configuration file
-
-vi /etc/nginx/nginx.config
-
-And change below code
-
-location / {
-    root html;
-    index index.html index.htm;
-  }
-
-with following one
-
-location / {
-    proxy_set_header  X-Real-IP  $remote_addr;
-    proxy_set_header  Host       $http_host;
-    proxy_pass        http://127.0.0.1:3000;
-  }
-
-Restart nginx for the new config to take effect.
-
-Now visit your server’s public DNS URL, It should show “hello word” in response rather than nginx welcome page
-
-If still not working, then check nginx.config file including another configuration file
